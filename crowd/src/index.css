@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap');
+
+:root {
+  color-scheme: dark;
+  --zc-bg: #131f19;
+  --zc-panel: #1b2b22;
+  --zc-panel-2: #21372b;
+  --zc-row-hover: #223a2c;
+  --zc-line: #2d6a4f;
+  --zc-line-2: #223a2c;
+  --zc-gold: #c9a227;
+  --zc-gold-hi: #e4c766;
+  --zc-ink: #f2ebda;
+  --zc-ink-dim: #ddd6c4;
+  --zc-muted: #8fa396;
+  --zc-muted-2: #a9bcaf;
+  --zc-faint: #5b6b60;
+  --zc-sage: #7fa893;
+  --zc-red: #ec3013;
+  --zc-red-dark: #8e1b08;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--zc-bg);
+  color: var(--zc-ink);
+  font-family: Archivo, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+#root { min-height: 100dvh; }
+
+button { font-family: inherit; }
+input { font-family: inherit; }
+
+a { color: var(--zc-gold); }
+a:hover { color: var(--zc-gold-hi); }
+
+@keyframes ccpulse { 0% { opacity: .35; } 50% { opacity: 1; } 100% { opacity: .35; } }
+@keyframes ccflash { 0% { background: var(--zc-red); } 50% { background: var(--zc-red-dark); } 100% { background: var(--zc-red); } }
+
+.ccbtn { transition: transform .05s ease; }
+.ccbtn:active { transform: translateY(1px); }
+.ccrow:hover { background: var(--zc-row-hover); }
+
+.zc-scroll::-webkit-scrollbar { width: 0; height: 0; }
+.zc-scroll { scrollbar-width: none; }
