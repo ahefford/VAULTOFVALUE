@@ -82,12 +82,17 @@ function CaptainSetup() {
     setBusy(true)
     setError(null)
     try {
+      // firestore.rules only allows zone writes from the Captain, checked via
+      // a people/{uid} lookup — so the captain's own profile has to exist
+      // *before* the zones are created, not after (that ordering used to be
+      // reversed here, which made every fresh-event bootstrap permission-
+      // denied on the very first write).
+      await createMyProfile({ name: trimmed, role: 'captain', zone: null, post: 'Captain' })
       await Promise.all([
         addZone({ id: 'main', name: 'Main Floor', short: 'MAIN', leadId: null, dutiesLabel: 'MAIN FLOOR' }),
         addZone({ id: 'reg', name: 'Registration', short: 'REG', leadId: null, dutiesLabel: 'REGISTRATION' }),
         addZone({ id: 'exits', name: 'Exits', short: 'EXITS', leadId: null, dutiesLabel: 'EXITS' }),
       ])
-      await createMyProfile({ name: trimmed, role: 'captain', zone: null, post: 'Captain' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
       setBusy(false)
