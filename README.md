@@ -80,23 +80,29 @@ tab depends on role.
 
 ## One-time Firebase setup
 
-1. In the [Firebase console](https://console.firebase.google.com/), open (or
-   create) the project this event uses.
-2. **Project settings → General → Your apps → Add app → Web** (skip
-   Hosting). Copy the `firebaseConfig` values into `.env.local` at the repo
-   root — see `.env.example` for the exact variable names.
-3. **Authentication → Sign-in method → Email/Password** → enable. Every
+The web app config for the `zonecall-83044` Firebase project is already
+committed in `.env.production` (a Firebase web config isn't a secret — it
+ships in every visitor's JS bundle regardless; real access control is in
+`crowd/firestore.rules`, enforced server-side via Firebase Auth). Two
+things still need doing once, in the [Firebase console](https://console.firebase.google.com/project/zonecall-83044):
+
+1. **Authentication → Sign-in method → Email/Password** → enable. Every
    team member creates their own account with an email and password —
    there's no admin-provisioned login and no magic links.
-4. **Firestore Database → Create database** (production mode is fine).
-5. Publish `crowd/firestore.rules` to that database (Firebase console →
-   Firestore → Rules, paste the file's contents and publish; or via the
-   Firebase CLI: `firebase deploy --only firestore:rules`).
+2. **Firestore Database → Create database** (production mode is fine, any
+   region), then publish `crowd/firestore.rules` to it (Firestore → Rules
+   tab, paste the file's contents and publish; or via the Firebase CLI:
+   `firebase deploy --only firestore:rules`).
 
 Read `crowd/firestore.rules` for exactly what access it grants. Every
 person document's ID is that user's Firebase Auth UID, so rules can and do
 check "is this your own document" or "is the requester the Captain" — it's
 real per-person access control, not just an open-to-anyone-signed-in gate.
+
+To point this app at a **different** Firebase project (a different event
+organization, local development against your own sandbox project, etc.),
+copy `.env.example` to a gitignored `.env.local` and fill in that
+project's own web config — `.env.local` always wins over `.env.production`.
 
 ## Setting up an event
 
@@ -109,6 +115,7 @@ own real login; the Captain can only reassign zone/role or remove someone
 from the Team tab's **Manage Team** panel afterward, not create their
 account for them.
 
-To run a new event, change `VITE_ZC_EVENT_ID` in `.env.local` to a new slug
+To run a new event on the same Firebase project, change `VITE_ZC_EVENT_ID`
+in `.env.production` (or a local-only `.env.local` override) to a new slug
 — each slug gets its own roster, zones and messages, scoped under
 `/events/{eventId}/` in Firestore.
