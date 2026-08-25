@@ -15,12 +15,11 @@ import {
   type DocumentData,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
+import type { User as FirebaseUser } from 'firebase/auth'
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { db, EVENT_ID, ensureSignedIn, FIREBASE_CONFIGURED } from '../firebase'
+import { db, EVENT_ID, FIREBASE_CONFIGURED, resetPassword, signIn, signOutUser, signUp, watchAuth } from '../firebase'
 import { makeId } from '../lib/id'
 import type { Alert, AlertLevel, BreakRequest, Incident, IncidentLevel, Person, PersonStatus, Role, Zone } from '../types'
-
-const ME_KEY = 'zc_me_id'
 
 function col(name: string) {
   return collection(db, 'events', EVENT_ID, name)
@@ -39,9 +38,21 @@ function watch<T>(name: string, map: (d: QueryDocumentSnapshot<DocumentData>) =>
   )
 }
 
+function initialsFor(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('')
+}
+
 interface StoreState {
-  ready: boolean
+  authChecked: boolean
+  authUser: FirebaseUser | null
   authError: string | null
+  ready: boolean
   people: Person[]
   zones: Zone[]
   incidents: Incident[]
@@ -51,11 +62,14 @@ interface StoreState {
 
 interface StoreValue {
   state: StoreState
-  meId: string | null
   me: Person | null
-  setMeId: (id: string | null) => void
 
-  addPerson: (input: { name: string; role: Role; zone: string | null; post: string }) => Promise<string>
+  signUp: (email: string, password: string) => Promise<void>
+  signIn: (email: string, password: string) => Promise<void>
+  signOut: () => Promise<void>
+  resetPassword: (email: string) => Promise<void>
+
+  createMyProfile: (input: { name: string; role: Role; zone: string | null; post: string }) => Promise<void>
   updatePerson: (id: string, patch: Partial<Pick<Person, 'name' | 'role' | 'zone' | 'post' | 'status'>>) => Promise<void>
   removePerson: (id: string) => Promise<void>
 
@@ -81,140 +95,139 @@ interface StoreValue {
 const StoreContext = createContext<StoreValue | null>(null)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
+  const [authUser, setAuthUser] = useState<FirebaseUser | null>(null)
   const [authError, setAuthError] = useState<string | null>(null)
+  const [ready, setReady] = useState(false)
   const [people, setPeople] = useState<Person[]>([])
   const [zones, setZones] = useState<Zone[]>([])
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [breaks, setBreaks] = useState<BreakRequest[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
-  const [meId, setMeIdState] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(ME_KEY)
-    } catch {
-      return null
-    }
-  })
-
-  const setMeId = (id: string | null) => {
-    setMeIdState(id)
-    try {
-      if (id) localStorage.setItem(ME_KEY, id)
-      else localStorage.removeItem(ME_KEY)
-    } catch {
-      // ignore storage failures (private browsing, etc.)
-    }
-  }
 
   useEffect(() => {
     if (!FIREBASE_CONFIGURED) {
       setAuthError('Firebase is not configured. Set VITE_ZC_* environment variables (see .env.example).')
+      setAuthChecked(true)
       return
     }
-    let unsubs: Array<() => void> = []
-    ensureSignedIn()
-      .then(() => {
-        unsubs = [
-          watch<Person>(
-            'people',
-            (d) => {
-              const v = d.data()
-              return {
-                id: d.id,
-                name: v.name ?? '',
-                initials: v.initials ?? '··',
-                role: (v.role ?? 'member') as Role,
-                zone: v.zone ?? null,
-                post: v.post ?? '',
-                status: (v.status ?? 'off') as PersonStatus,
-                debriefed: Boolean(v.debriefed),
-                createdAt: toMs(v.createdAt),
-              }
-            },
-            setPeople,
-          ),
-          watch<Zone>(
-            'zones',
-            (d) => {
-              const v = d.data()
-              return {
-                id: d.id,
-                name: v.name ?? '',
-                short: v.short ?? '',
-                leadId: v.leadId ?? null,
-                dutiesLabel: v.dutiesLabel ?? 'MAIN FLOOR',
-              }
-            },
-            setZones,
-          ),
-          watch<Incident>(
-            'incidents',
-            (d) => {
-              const v = d.data()
-              return {
-                id: d.id,
-                byId: v.byId ?? '',
-                text: v.text ?? '',
-                level: (v.level ?? 'med') as IncidentLevel,
-                status: (v.status ?? 'open') as 'open' | 'closed',
-                acks: (v.acks ?? []) as string[],
-                atMs: toMs(v.at),
-              }
-            },
-            setIncidents,
-          ),
-          watch<BreakRequest>(
-            'breaks',
-            (d) => {
-              const v = d.data()
-              return {
-                id: d.id,
-                byId: v.byId ?? '',
-                status: (v.status ?? 'pending') as BreakRequest['status'],
-                atMs: toMs(v.at),
-              }
-            },
-            setBreaks,
-          ),
-          watch<Alert>(
-            'alerts',
-            (d) => {
-              const v = d.data()
-              return {
-                id: d.id,
-                from: v.from ?? '',
-                text: v.text ?? '',
-                level: (v.level ?? 'notice') as AlertLevel,
-                acks: (v.acks ?? []) as string[],
-                atMs: toMs(v.at),
-              }
-            },
-            setAlerts,
-          ),
-        ]
-        setReady(true)
-      })
-      .catch((err: unknown) => {
-        setAuthError(err instanceof Error ? err.message : 'Could not sign in to Firebase.')
-      })
-    return () => {
-      unsubs.forEach((u) => u())
-    }
+    return watchAuth((user) => {
+      setAuthUser(user)
+      setAuthChecked(true)
+    })
   }, [])
 
-  const me = useMemo(() => people.find((p) => p.id === meId) ?? null, [people, meId])
+  useEffect(() => {
+    if (!authUser) {
+      setReady(false)
+      setPeople([])
+      setZones([])
+      setIncidents([])
+      setBreaks([])
+      setAlerts([])
+      return
+    }
+    const unsubs = [
+      watch<Person>(
+        'people',
+        (d) => {
+          const v = d.data()
+          return {
+            id: d.id,
+            name: v.name ?? '',
+            initials: v.initials ?? '··',
+            role: (v.role ?? 'member') as Role,
+            zone: v.zone ?? null,
+            post: v.post ?? '',
+            status: (v.status ?? 'off') as PersonStatus,
+            debriefed: Boolean(v.debriefed),
+            createdAt: toMs(v.createdAt),
+          }
+        },
+        setPeople,
+      ),
+      watch<Zone>(
+        'zones',
+        (d) => {
+          const v = d.data()
+          return {
+            id: d.id,
+            name: v.name ?? '',
+            short: v.short ?? '',
+            leadId: v.leadId ?? null,
+            dutiesLabel: v.dutiesLabel ?? 'MAIN FLOOR',
+          }
+        },
+        setZones,
+      ),
+      watch<Incident>(
+        'incidents',
+        (d) => {
+          const v = d.data()
+          return {
+            id: d.id,
+            byId: v.byId ?? '',
+            text: v.text ?? '',
+            level: (v.level ?? 'med') as IncidentLevel,
+            status: (v.status ?? 'open') as 'open' | 'closed',
+            acks: (v.acks ?? []) as string[],
+            atMs: toMs(v.at),
+          }
+        },
+        setIncidents,
+      ),
+      watch<BreakRequest>(
+        'breaks',
+        (d) => {
+          const v = d.data()
+          return {
+            id: d.id,
+            byId: v.byId ?? '',
+            status: (v.status ?? 'pending') as BreakRequest['status'],
+            atMs: toMs(v.at),
+          }
+        },
+        setBreaks,
+      ),
+      watch<Alert>(
+        'alerts',
+        (d) => {
+          const v = d.data()
+          return {
+            id: d.id,
+            from: v.from ?? '',
+            text: v.text ?? '',
+            level: (v.level ?? 'notice') as AlertLevel,
+            acks: (v.acks ?? []) as string[],
+            atMs: toMs(v.at),
+          }
+        },
+        setAlerts,
+      ),
+    ]
+    setReady(true)
+    return () => unsubs.forEach((u) => u())
+  }, [authUser])
+
+  const me = useMemo(() => people.find((p) => p.id === authUser?.uid) ?? null, [people, authUser])
 
   const value = useMemo<StoreValue>(() => {
-    const addPerson: StoreValue['addPerson'] = async ({ name, role, zone, post }) => {
-      const ref = await addDoc(col('people'), {
+    const wrapAuth = <A extends unknown[]>(fn: (...a: A) => Promise<unknown>) =>
+      async (...a: A) => {
+        setAuthError(null)
+        try {
+          await fn(...a)
+        } catch (err) {
+          setAuthError(err instanceof Error ? err.message : 'Something went wrong.')
+          throw err
+        }
+      }
+
+    const createMyProfile: StoreValue['createMyProfile'] = async ({ name, role, zone, post }) => {
+      if (!authUser) throw new Error('Not signed in.')
+      await setDoc(doc(col('people'), authUser.uid), {
         name,
-        initials: name
-          .trim()
-          .split(/\s+/)
-          .filter(Boolean)
-          .slice(0, 2)
-          .map((w) => w[0]?.toUpperCase() ?? '')
-          .join(),
+        initials: initialsFor(name),
         role,
         zone,
         post,
@@ -222,7 +235,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         debriefed: false,
         createdAt: serverTimestamp(),
       })
-      return ref.id
     }
     const updatePerson: StoreValue['updatePerson'] = async (id, patch) => {
       await updateDoc(doc(col('people'), id), patch)
@@ -309,11 +321,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
 
     return {
-      state: { ready, authError, people, zones, incidents, breaks, alerts },
-      meId,
+      state: { authChecked, authUser, authError, ready, people, zones, incidents, breaks, alerts },
       me,
-      setMeId,
-      addPerson,
+      signUp: wrapAuth((email: string, password: string) => signUp(email, password)),
+      signIn: wrapAuth((email: string, password: string) => signIn(email, password)),
+      signOut: wrapAuth(() => signOutUser()),
+      resetPassword: wrapAuth((email: string) => resetPassword(email)),
+      createMyProfile,
       updatePerson,
       removePerson,
       addZone,
@@ -333,7 +347,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setTyping,
       },
     }
-  }, [ready, authError, people, zones, incidents, breaks, alerts, meId, me])
+  }, [authChecked, authUser, authError, ready, people, zones, incidents, breaks, alerts, me])
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }

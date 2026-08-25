@@ -25,7 +25,7 @@ function checkKey(personId: string) {
 }
 
 export function BookScreen() {
-  const { me, api } = useStore()
+  const { me, api, signOut, state } = useStore()
   const [checked, setChecked] = useState<Record<number, boolean>>({})
 
   useEffect(() => {
@@ -140,6 +140,18 @@ export function BookScreen() {
           }}
         >
           {me.debriefed ? 'DEBRIEF FILED — VISIBLE TO CAPTAIN' : 'FILE MY SHIFT DEBRIEF'}
+        </button>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.18em', color: 'var(--zc-muted)' }}>ACCOUNT</div>
+        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--zc-muted-2)', marginTop: 6 }}>{state.authUser?.email}</div>
+        <button
+          className="ccbtn"
+          onClick={() => void signOut()}
+          style={{ width: '100%', marginTop: 10, border: '1px solid var(--zc-line)', background: 'transparent', color: 'var(--zc-muted-2)', fontFamily: 'Archivo, sans-serif', fontSize: 11, fontWeight: 800, letterSpacing: '.12em', textAlign: 'left', padding: 13, cursor: 'pointer' }}
+        >
+          SIGN OUT
         </button>
       </div>
 

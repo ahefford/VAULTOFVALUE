@@ -2,22 +2,72 @@ rules_version = '2';
 
 // Crowd Control (Zonecall) — Firestore security rules.
 //
-// This app has no server of its own (it's a static site), so the only
-// gate available is Firebase Authentication. We use Anonymous Auth: every
-// device gets a real (if pseudonymous) Firebase UID the moment it loads
-// the app, and every read/write below requires that UID to be present.
-//
-// This is NOT per-person access control — any signed-in device can read
-// or write any document under an event, including messing with other
-// people's status or roster entries. That's an accepted tradeoff for a
-// small trusted team working one event, gated further by the event slug
-// (VITE_ZC_EVENT_ID) not being public. Do not reuse this project for
-// anything where that isn't an acceptable risk without adding a backend
-// (e.g. Cloud Functions) to enforce per-user permissions properly.
+// Identity is real: Firebase Authentication (email/password), and every
+// person document's ID is that user's auth UID. Rules below use that to
+// scope writes to "yourself" or "the Captain" wherever it matters, rather
+// than trusting the client. This app has no server of its own (it's a
+// static site), so this — plus whatever Firebase Auth itself enforces — is
+// the full access-control surface; there's no backend to add extra checks
+// (e.g. rate limiting, email verification gating) beyond what's below.
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /events/{eventId}/{document=**} {
-      allow read, write: if request.auth != null;
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isCaptain(eventId) {
+      return signedIn() &&
+        get(/databases/$(database)/documents/events/$(eventId)/people/$(request.auth.uid)).data.role == 'captain';
+    }
+
+    match /events/{eventId} {
+
+      match /people/{personId} {
+        allow read: if signedIn();
+        // Everyone creates/edits their own profile; the Captain can also
+        // reassign anyone's role/zone/post from the Team tab.
+        allow create: if signedIn() && request.auth.uid == personId;
+        allow update: if signedIn() && (request.auth.uid == personId || isCaptain(eventId));
+        allow delete: if isCaptain(eventId);
+      }
+
+      match /zones/{zoneId} {
+        allow read: if signedIn();
+        allow write: if isCaptain(eventId);
+      }
+
+      match /incidents/{incidentId} {
+        allow read: if signedIn();
+        allow create: if signedIn() && request.resource.data.byId == request.auth.uid;
+        // Acknowledging (ack arrays) and closing out are both simple status
+        // moves any signed-in team member can make.
+        allow update: if signedIn();
+      }
+
+      match /breaks/{breakId} {
+        allow read: if signedIn();
+        allow create: if signedIn() && request.resource.data.byId == request.auth.uid;
+        // Approve/deny should really be lead-of-that-zone-only; kept open to
+        // any signed-in member for now rather than an expensive nested get().
+        allow update: if signedIn();
+      }
+
+      match /alerts/{alertId} {
+        allow read: if signedIn();
+        allow create: if isCaptain(eventId);
+        allow update: if signedIn(); // anyone acknowledging
+      }
+
+      match /threads/{threadId} {
+        allow read, write: if signedIn(); // typingIds map
+
+        match /messages/{messageId} {
+          allow read: if signedIn();
+          allow create: if signedIn() && request.resource.data.byId == request.auth.uid;
+          allow update: if signedIn(); // readBy arrayUnion by other participants
+        }
+      }
     }
   }
 }

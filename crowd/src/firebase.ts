@@ -1,5 +1,14 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth, signInAnonymously, onAuthStateChanged, type Auth, type User } from 'firebase/auth'
+import {
+  createUserWithEmailAndPassword,
+  getAuth,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
+  type Auth,
+  type User,
+} from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
@@ -23,28 +32,33 @@ export const db = getFirestore(app)
 // it at all when unconfigured crashes the app before the "set VITE_ZC_*"
 // error screen can even render.
 let auth: Auth | null = null
-let authReady: Promise<User> | null = null
 
-export function ensureSignedIn(): Promise<User> {
-  if (!FIREBASE_CONFIGURED) return Promise.reject(new Error('Firebase is not configured (missing VITE_ZC_* env vars).'))
-  if (authReady) return authReady
+function requireAuth(): Auth {
+  if (!FIREBASE_CONFIGURED) throw new Error('Firebase is not configured (missing VITE_ZC_* env vars).')
   if (!auth) auth = getAuth(app)
-  const a = auth
-  authReady = new Promise((resolvePromise, reject) => {
-    const unsub = onAuthStateChanged(
-      a,
-      (user) => {
-        if (user) {
-          unsub()
-          resolvePromise(user)
-        }
-      },
-      reject,
-    )
-    signInAnonymously(a).catch((err) => {
-      unsub()
-      reject(err)
-    })
-  })
-  return authReady
+  return auth
+}
+
+export function watchAuth(onChange: (user: User | null) => void): () => void {
+  if (!FIREBASE_CONFIGURED) {
+    onChange(null)
+    return () => {}
+  }
+  return onAuthStateChanged(requireAuth(), onChange)
+}
+
+export function signUp(email: string, password: string) {
+  return createUserWithEmailAndPassword(requireAuth(), email, password)
+}
+
+export function signIn(email: string, password: string) {
+  return signInWithEmailAndPassword(requireAuth(), email, password)
+}
+
+export function signOutUser() {
+  return signOut(requireAuth())
+}
+
+export function resetPassword(email: string) {
+  return sendPasswordResetEmail(requireAuth(), email)
 }

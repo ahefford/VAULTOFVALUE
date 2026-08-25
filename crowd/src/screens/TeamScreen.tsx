@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useStore } from '../store/store'
 import { STATUS_META, type Role } from '../types'
 import { CrownIcon } from '../components/CrownIcon'
-import { primaryBtn } from '../components/styles'
 
 export function TeamScreen({ onDm }: { onDm: (personId: string) => void }) {
   const { state, me } = useStore()
@@ -116,11 +115,7 @@ export function TeamScreen({ onDm }: { onDm: (personId: string) => void }) {
 }
 
 function ManageTeam() {
-  const { state, addPerson, updatePerson, removePerson, addZone, updateZone } = useStore()
-  const [name, setName] = useState('')
-  const [role, setRole] = useState<Role>('member')
-  const [zone, setZone] = useState(state.zones[0]?.id ?? '')
-  const [post, setPost] = useState('')
+  const { state, updatePerson, removePerson, addZone } = useStore()
   const [newZoneName, setNewZoneName] = useState('')
 
   const fieldStyle = {
@@ -136,38 +131,8 @@ function ManageTeam() {
 
   return (
     <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ background: 'var(--zc-panel)', border: '1px solid var(--zc-line)', padding: 14 }}>
-        <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.18em', color: 'var(--zc-gold)' }}>ADD TEAM MEMBER</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-          <input style={fieldStyle} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <select style={fieldStyle} value={role} onChange={(e) => setRole(e.target.value as Role)}>
-              <option value="member">Member</option>
-              <option value="lead">Lead</option>
-            </select>
-            <select style={fieldStyle} value={zone} onChange={(e) => setZone(e.target.value)}>
-              {state.zones.map((z) => (
-                <option key={z.id} value={z.id}>
-                  {z.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <input style={fieldStyle} placeholder="Post (e.g. North aisle)" value={post} onChange={(e) => setPost(e.target.value)} />
-          <button
-            className="ccbtn"
-            style={primaryBtn}
-            onClick={async () => {
-              if (!name.trim()) return
-              const id = await addPerson({ name: name.trim(), role, zone: zone || null, post: post.trim() || 'Floor' })
-              if (role === 'lead' && zone) await updateZone(zone, { leadId: id })
-              setName('')
-              setPost('')
-            }}
-          >
-            ADD TO ROSTER
-          </button>
-        </div>
+      <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--zc-muted-2)', lineHeight: 1.5 }}>
+        New team members join themselves — sign up with email/password, then fill in their name and zone. Reassign zone/role or remove someone below.
       </div>
 
       <div style={{ background: 'var(--zc-panel)', border: '1px solid var(--zc-line)', padding: 14 }}>

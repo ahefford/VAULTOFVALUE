@@ -7,7 +7,8 @@ import { BottomTabs, type TabDef } from './components/BottomTabs'
 import { Banner } from './components/Banner'
 import { ReportSheet } from './components/ReportSheet'
 import { EmergencyOverlay } from './components/EmergencyOverlay'
-import { Onboarding } from './screens/Onboarding'
+import { AuthGate } from './screens/AuthGate'
+import { ProfileSetup } from './screens/ProfileSetup'
 import { ZoneScreen } from './screens/ZoneScreen'
 import { MapScreen } from './screens/MapScreen'
 import { TeamScreen } from './screens/TeamScreen'
@@ -50,7 +51,7 @@ export default function App() {
     )
   }
 
-  if (!state.ready) {
+  if (!state.authChecked) {
     return (
       <div style={{ minHeight: '100dvh', background: 'var(--zc-bg)', color: 'var(--zc-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         Connecting…
@@ -58,7 +59,17 @@ export default function App() {
     )
   }
 
-  if (!me) return <Onboarding />
+  if (!state.authUser) return <AuthGate />
+
+  if (!state.ready) {
+    return (
+      <div style={{ minHeight: '100dvh', background: 'var(--zc-bg)', color: 'var(--zc-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        Loading event…
+      </div>
+    )
+  }
+
+  if (!me) return <ProfileSetup />
 
   const myZone = state.zones.find((z) => z.id === me.zone) ?? null
   const openIncidents = state.incidents.filter((i) => i.status === 'open')

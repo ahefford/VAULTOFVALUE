@@ -62,7 +62,9 @@ staff in real time: everyone's zone status, a captain's live headcount and
 broadcasts, an incident/escalation flow, and radio-style team chat — all
 synced across phones. Unlike Vault of Value, this one needs a live backend
 (status has to be visible to *other people's* phones), so it's backed by
-Firebase (Firestore + Anonymous Auth) rather than being fully on-device.
+Firebase — Firestore for data, and Authentication (email/password) for
+real per-person identity, which `crowd/firestore.rules` uses to scope
+writes to "yourself" or "the Captain."
 
 ## Roles
 
@@ -78,33 +80,42 @@ tab depends on role.
 
 ## One-time Firebase setup
 
-1. In the [Firebase console](https://console.firebase.google.com/), open (or
-   create) the project this event uses.
-2. **Project settings → General → Your apps → Add app → Web** (skip
-   Hosting). Copy the `firebaseConfig` values into `.env.local` at the repo
-   root — see `.env.example` for the exact variable names.
-3. **Authentication → Sign-in method → Anonymous** → enable. Every device
-   that opens the app signs in anonymously; there's no email/password.
-4. **Firestore Database → Create database** (production mode is fine).
-5. Publish `crowd/firestore.rules` to that database (Firebase console →
-   Firestore → Rules, paste the file's contents and publish; or via the
-   Firebase CLI: `firebase deploy --only firestore:rules`).
+The web app config for the `zonecall-83044` Firebase project is already
+committed in `.env.production` (a Firebase web config isn't a secret — it
+ships in every visitor's JS bundle regardless; real access control is in
+`crowd/firestore.rules`, enforced server-side via Firebase Auth). Two
+things still need doing once, in the [Firebase console](https://console.firebase.google.com/project/zonecall-83044):
 
-Read `crowd/firestore.rules` for exactly what access it grants — in short,
-any device that has loaded the app can read/write any data for that event.
-That's a deliberate tradeoff for a small trusted team with no backend of its
-own; it is not per-person access control.
+1. **Authentication → Sign-in method → Email/Password** → enable. Every
+   team member creates their own account with an email and password —
+   there's no admin-provisioned login and no magic links.
+2. **Firestore Database → Create database** (production mode is fine, any
+   region), then publish `crowd/firestore.rules` to it (Firestore → Rules
+   tab, paste the file's contents and publish; or via the Firebase CLI:
+   `firebase deploy --only firestore:rules`).
+
+Read `crowd/firestore.rules` for exactly what access it grants. Every
+person document's ID is that user's Firebase Auth UID, so rules can and do
+check "is this your own document" or "is the requester the Captain" — it's
+real per-person access control, not just an open-to-anyone-signed-in gate.
+
+To point this app at a **different** Firebase project (a different event
+organization, local development against your own sandbox project, etc.),
+copy `.env.example` to a gitignored `.env.local` and fill in that
+project's own web config — `.env.local` always wins over `.env.production`.
 
 ## Setting up an event
 
-The first person to open the app with no zones yet configured gets a
-"set up this event" flow that makes them Captain and creates three zones
-(Main Floor, Registration, Exits). From there the Captain can add team
-members, promote leads, and add more zones from the Team tab's **Manage
-Team** panel. Everyone else picks their name (or adds themselves) the first
-time they open the app; that choice is remembered on their device via
-`localStorage`, not tied to any login.
+Sign up (email + password) to get in at all. The first person to do so for
+a fresh event gets a "set up this event" flow that makes them Captain and
+creates three zones (Main Floor, Registration, Exits). Everyone after that
+signs up themselves and fills in their name, zone and post — there's no
+"add a team member" form because each person's identity has to be their
+own real login; the Captain can only reassign zone/role or remove someone
+from the Team tab's **Manage Team** panel afterward, not create their
+account for them.
 
-To run a new event, change `VITE_ZC_EVENT_ID` in `.env.local` to a new slug
+To run a new event on the same Firebase project, change `VITE_ZC_EVENT_ID`
+in `.env.production` (or a local-only `.env.local` override) to a new slug
 — each slug gets its own roster, zones and messages, scoped under
 `/events/{eventId}/` in Firestore.
